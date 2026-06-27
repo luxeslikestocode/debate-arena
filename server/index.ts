@@ -44,15 +44,147 @@ interface SignalingMessage {
 const rooms = new Map<string, DebateRoom>();
 const userConnections = new Map<string, { ws: WebSocket; roomId: string; userId: string }>();
 
-// Create HTTP server for health checks
-const server = createServer((req, res) => {
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', rooms: rooms.size }));
-  } else {
-    res.writeHead(404);
-    res.end('Not found');
+// In-memory debate storage (shared across users)
+interface DebateRecord {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  isLive: boolean;
+  started?: string;
+  watching?: string;
+  creatorId?: string;
+  createdAt?: number;
+  isAudioOnly?: boolean;
+  maxSpeakers?: number;
+  allowVoting?: boolean;
+  duration?: string;
+}
+
+const debates = new Map<string, DebateRecord>();
+
+// Helper: parse URL path and body
+function parseUrl(url: string | undefined): { path: string; query: Record<string, string> } {
+  if (!url) return { path: '/', query: {} };
+  const [path, qs] = url.split('?');
+  const query: Record<string, string> = {};
+  if (qs) {
+    qs.split('&').forEach(p => {
+      const [k, v] = p.split('=');
+      query[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    });
   }
+  return { path, query };
+}
+
+function readBody(req: import('http').IncomingMessage): Promise<string> {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', (chunk: string) => body += chunk);
+    req.on('end', () => resolve(body));
+  });
+}
+
+function corsHeaders(origin?: string) {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+// Create HTTP server for health checks + REST API
+const server = createServer(async (req, res) => {
+  const origin = req.headers.origin;
+  const cors = corsHeaders(origin || undefined);
+  
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, cors);
+    res.end();
+    return;
+  }
+
+  const { path, query } = parseUrl(req.url);
+  const headers = { 'Content-Type': 'application/json', ...cors };
+
+  if (req.method === 'GET' && path === '/health') {
+    res.writeHead(200, headers);
+    res.end(JSON.stringify({ status: 'ok', rooms: rooms.size, debates: debates.size }));
+    return;
+  }
+
+  // GET /api/debates — list all debates
+  if (req.method === 'GET' && path === '/api/debates') {
+    res.writeHead(200, headers);
+    res.end(JSON.stringify(Array.from(debates.values())));
+    return;
+  }
+
+  // POST /api/debates — create a debate
+  if (req.method === 'POST' && path === '/api/debates') {
+    const body = await readBody(req);
+    try {
+      const data = JSON.parse(body);
+      if (!data.id) {
+        res.writeHead(400, headers);
+        res.end(JSON.stringify({ error: 'Debate must have an id' }));
+        return;
+      }
+      const record: DebateRecord = {
+        id: data.id,
+        title: data.title || 'Untitled Debate',
+        description: data.description,
+        category: data.category,
+        tags: data.tags || [],
+        isLive: data.isLive !== false,
+        started: data.started || 'Live Now',
+        watching: data.watching || '1',
+        creatorId: data.creatorId,
+        createdAt: data.createdAt || Date.now(),
+        isAudioOnly: data.isAudioOnly || false,
+        maxSpeakers: data.maxSpeakers || 4,
+        allowVoting: data.allowVoting !== false,
+        duration: data.duration,
+      };
+      debates.set(data.id, record);
+      res.writeHead(201, headers);
+      res.end(JSON.stringify(record));
+    } catch {
+      res.writeHead(400, headers);
+      res.end(JSON.stringify({ error: 'Invalid JSON' }));
+    }
+    return;
+  }
+
+  // GET /api/debates/:id — get a single debate
+  const debateMatch = path.match(/^\/api\/debates\/(.+)$/);
+  if (req.method === 'GET' && debateMatch) {
+    const id = decodeURIComponent(debateMatch[1]);
+    const debate = debates.get(id);
+    if (!debate) {
+      res.writeHead(404, headers);
+      res.end(JSON.stringify({ error: 'Debate not found' }));
+      return;
+    }
+    res.writeHead(200, headers);
+    res.end(JSON.stringify(debate));
+    return;
+  }
+
+  // DELETE /api/debates/:id — delete a debate
+  if (req.method === 'DELETE' && debateMatch) {
+    const id = decodeURIComponent(debateMatch[1]);
+    debates.delete(id);
+    res.writeHead(200, headers);
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // 404 for everything else
+  res.writeHead(404, headers);
+  res.end(JSON.stringify({ error: 'Not found' }));
 });
 
 const wss = new WebSocketServer({ server });

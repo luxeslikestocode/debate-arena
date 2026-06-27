@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useUser, useAuth as useClerkAuth } from '@clerk/react';
 
 export interface User {
   id: string;
@@ -6,6 +7,8 @@ export interface User {
   username: string;
   avatar?: string;
   isVerified?: boolean;
+  isMuted?: boolean;
+  isCameraOn?: boolean;
 }
 
 interface AuthContextType {
@@ -16,56 +19,72 @@ interface AuthContextType {
   updateUser: (updates: Partial<User>) => void;
 }
 
+interface LocalUserRecord {
+  id: string;
+  name: string;
+  username: string;
+  avatar?: string;
+  isVerified?: boolean;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'debate_arena_user';
+function clerkUserToAppUser(clerkUser: any): User {
+  const name = clerkUser.fullName || clerkUser.username || clerkUser.emailAddresses?.[0]?.emailAddress?.split('@')[0] || 'User';
+  const username = clerkUser.username ? `@${clerkUser.username}` : `@${name.toLowerCase().replace(/\s+/g, '_')}`;
+  return {
+    id: clerkUser.id,
+    name,
+    username,
+    avatar: clerkUser.imageUrl,
+    isVerified: false,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user: clerkUser, isSignedIn } = useUser();
+  const { signOut } = useClerkAuth();
+
+  const adaptUser = (): User | null => {
+    if (!isSignedIn || !clerkUser) return null;
+    const storedRaw = localStorage.getItem('debate_arena_local_user');
+    if (storedRaw) {
+      try {
+        const localUser = JSON.parse(storedRaw) as LocalUserRecord;
+        if (localUser.id === clerkUser.id) {
+          return { ...localUser, isMuted: false, isCameraOn: true };
+        }
+      } catch {}
+    }
+    return clerkUserToAppUser(clerkUser);
+  };
+
+  const [user, setUser] = useState<User | null>(adaptUser);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setUser(parsed);
-        setIsAuthenticated(true);
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
+    setUser(adaptUser());
+  }, [clerkUser, isSignedIn]);
+
+  const login = useCallback((_name: string) => {
+    window.location.href = '/login';
   }, []);
 
-  const login = (name: string) => {
-    const newUser: User = {
-      id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name,
-      username: `@${name.toLowerCase().replace(/\s+/g, '_')}`,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-      isVerified: false,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
-    setUser(newUser);
-    setIsAuthenticated(true);
-  };
+  const logout = useCallback(() => {
+    localStorage.removeItem('debate_arena_local_user');
+    signOut();
+  }, [signOut]);
 
-  const logout = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setUser(null);
-    setIsAuthenticated(false);
-  };
-
-  const updateUser = (updates: Partial<User>) => {
-    if (user) {
-      const updated = { ...user, ...updates };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      setUser(updated);
-    }
-  };
+  const updateUser = useCallback((updates: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return null;
+      const updated = { ...prev, ...updates };
+      localStorage.setItem('debate_arena_local_user', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!isSignedIn, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

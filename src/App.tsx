@@ -5,6 +5,7 @@ import { MobileNav } from './components/MobileNav';
 import { useRef, useState, MouseEvent, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, User as AppUser } from './lib/auth';
+import { SignInButton, UserButton, SignIn, Show } from '@clerk/react';
 import { createDebate, deleteDebate, fetchDebates } from './lib/api';
 import { ExploreView, type Debate, type Creator, topicsData } from './components/ExploreView';
 import { DebateArena } from './components/DebateArena';
@@ -127,24 +128,15 @@ function Header({ onNavigate, onCreate, onToggleNotifications, showNotifications
         </div>
 
         <div className="relative">
-          <button onClick={() => setShowProfileMenu(!showProfileMenu)} className={`flex items-center gap-2 text-app-text-secondary hover:text-app-text-primary transition-colors p-1 rounded-full group ${showProfileMenu ? 'bg-app-elevated text-app-text-primary' : 'hover:bg-app-surface'}`}>
-            <div className={`w-8 h-8 rounded-full bg-app-surface border flex items-center justify-center text-app-text-secondary transition-colors overflow-hidden ${showProfileMenu ? 'border-app-text-muted' : 'border-app-border group-hover:border-app-text-muted/30'}`}><User size={16} /></div>
-            <ChevronDown size={14} className={`transition-transform duration-200 ${showProfileMenu ? 'rotate-180' : 'group-hover:translate-y-0.5'}`} />
-          </button>
-          <AnimatePresence>
-            {showProfileMenu && (
-              <motion.div initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }} className="absolute top-full right-0 mt-2 w-56 bg-app-card border border-app-border rounded-2xl overflow-hidden shadow-2xl py-2">
-                <div className="px-4 py-3 border-b border-app-border mb-1">
-                  <div className="text-xs font-bold text-app-text-primary">{user?.name || 'Anonymous'}</div>
-                  <div className="text-[10px] text-app-text-muted font-medium lowercase">{user?.username || '@user'}</div>
-                </div>
-                <button onClick={() => { onNavigate?.('profile'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-app-text-secondary hover:bg-app-surface hover:text-app-text-primary transition-colors"><User size={16} /><span>Profile</span></button>
-                <button onClick={() => { onNavigate?.('settings'); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-app-text-secondary hover:bg-app-surface hover:text-app-text-primary transition-colors"><Settings size={16} /><span>Settings & Privacy</span></button>
-                <div className="h-px bg-app-border my-1 mx-2" />
-                <button onClick={() => { onLogout?.(); setShowProfileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium text-rose-500 hover:bg-rose-500/5 transition-colors"><LogOut size={16} /><span>Log out</span></button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <UserButton 
+            appearance={{
+              elements: {
+                userButtonAvatarBox: 'w-8 h-8 rounded-full border border-app-border',
+                userButtonTrigger: 'focus:shadow-none',
+              },
+            }}
+            afterSignOutUrl="/"
+          />
         </div>
       </div>
     </header>
@@ -286,6 +278,10 @@ export default function App() {
       if (found) {
         setActiveDebate({ id: debateId, ...found });
         setView('arena');
+      } else {
+        // Still navigate to arena with a placeholder even if debate not in list
+        setActiveDebate({ id: debateId, title: 'Live Debate', isLive: true, watching: '0' });
+        setView('arena');
       }
     }
   }, [allDebates]);
@@ -381,7 +377,19 @@ export default function App() {
   });
 
   if (!isAuthenticated) {
-    return <AuthView onLogin={(name) => login(name)} />;
+    return (
+      <div className="flex min-h-screen bg-app-bg">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-full max-w-md p-8">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-bold text-app-text-primary mb-2">Debate Arena</h1>
+              <p className="text-app-text-secondary">Sign in to join or host live debates</p>
+            </div>
+            <SignIn routing="hash" signUpUrl="/sign-up" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
