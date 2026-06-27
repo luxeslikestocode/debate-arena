@@ -1,0 +1,21 @@
+{
+  "name": "debate-signaling-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node dist/server/index.js",
+    "build": "tsx build server/index.ts --outdir dist",
+    "dev": "tsx watch server/index.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "@types/uuid": "^10.0.0",
+    "typescript": "~5.8.2",
+    "tsx": "^4.21.0"
+  }
+}

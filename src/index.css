@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  /* Semantic Colors */
+  --color-app-bg: var(--bg-base);
+  --color-app-surface: var(--bg-surface);
+  --color-app-card: var(--bg-card);
+  --color-app-elevated: var(--bg-elevated);
+  --color-app-hover: var(--bg-hover);
+  --color-app-input: var(--bg-input);
+  
+  --color-app-text-primary: var(--text-primary);
+  --color-app-text-secondary: var(--text-secondary);
+  --color-app-text-muted: var(--text-muted);
+  
+  --color-app-border: var(--border-default);
+}
+
+:root {
+  --bg-base: #000000;
+  --bg-surface: #0a0a0a;
+  --bg-card: #111111;
+  --bg-elevated: #1a1a1a;
+  --bg-hover: #222222;
+  --bg-input: #111111;
+  
+  --text-primary: #ffffff;
+  --text-secondary: #a3a3a3;
+  --text-muted: #525252;
+  
+  --border-default: #1a1a1a;
+}
+
+[data-theme='light'] {
+  --bg-base: #ffffff;
+  --bg-surface: #f9f9f9;
+  --bg-card: #ffffff;
+  --bg-elevated: #f0f0f0;
+  --bg-hover: #f5f5f5;
+  --bg-input: #f9f9f9;
+  
+  --text-primary: #000000;
+  --text-secondary: #525252;
+  --text-muted: #a3a3a3;
+  
+  --border-default: #e5e5e5;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Global transitions for theme elements */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
