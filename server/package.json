@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node dist/server/index.js",
-    "build": "tsx build server/index.ts --outdir dist",
-    "dev": "tsx watch server/index.ts"
+    "start": "node --import tsx index.ts",
+    "build": "echo 'Build handled at runtime by tsx'",
+    "dev": "node --import tsx watch index.ts"
   },
   "dependencies": {
     "ws": "^8.18.0",
