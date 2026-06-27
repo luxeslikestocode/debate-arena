@@ -394,6 +394,37 @@ function handleHostAction(ws: WebSocket, message: SignalingMessage): void {
   const room = rooms.get(roomId);
   if (!room) return;
 
+  // Actions that ANY user can take (not just host)
+  if (action === 'request-to-speak' || action === 'cancel-request' || action === 'user-update') {
+    switch (action) {
+      case 'request-to-speak': {
+        const requester = room.users.get(userId);
+        if (requester && requester.role === 'viewer') {
+          const inQueue = room.queue.some(u => u.id === userId);
+          const isSpeaker = room.speakers.some(u => u.id === userId);
+          
+          if (!inQueue && !isSpeaker) {
+            room.queue.push({ ...requester, role: 'viewer' });
+            broadcastToRoom(roomId, {
+              type: 'queue-update',
+              payload: { queue: room.queue },
+            });
+          }
+        }
+        break;
+      }
+      case 'cancel-request': {
+        room.queue = room.queue.filter(u => u.id !== userId);
+        broadcastToRoom(roomId, {
+          type: 'queue-update',
+          payload: { queue: room.queue },
+        });
+        break;
+      }
+    }
+    return;
+  }
+
   const user = room.users.get(userId);
   if (!user || !user.isHost) {
     sendToUser(userId, { type: 'error', payload: { message: 'Not authorized' } });
@@ -514,31 +545,6 @@ function handleHostAction(ws: WebSocket, message: SignalingMessage): void {
       setTimeout(() => {
         rooms.delete(roomId);
       }, 5000);
-      break;
-    }
-    case 'request-to-speak': {
-      // Viewer requesting to speak
-      const requester = room.users.get(userId);
-      if (requester && requester.role === 'viewer') {
-        const inQueue = room.queue.some(u => u.id === userId);
-        const isSpeaker = room.speakers.some(u => u.id === userId);
-        
-        if (!inQueue && !isSpeaker) {
-          room.queue.push({ ...requester, role: 'viewer' });
-          broadcastToRoom(roomId, {
-            type: 'queue-update',
-            payload: { queue: room.queue },
-          });
-        }
-      }
-      break;
-    }
-    case 'cancel-request': {
-      room.queue = room.queue.filter(u => u.id !== userId);
-      broadcastToRoom(roomId, {
-        type: 'queue-update',
-        payload: { queue: room.queue },
-      });
       break;
     }
   }

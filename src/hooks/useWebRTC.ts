@@ -59,6 +59,7 @@ export function useWebRTC({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
   const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const knownSpeakerIdsRef = useRef<Set<string>>(new Set());
 
   const syncRemoteStreams = useCallback(() => {
     setRemoteStreams(Array.from(remoteStreamsRef.current.values()) as RemoteStream[]);
@@ -106,6 +107,12 @@ export function useWebRTC({
 
       localStreamRef.current = stream;
       setLocalStream(stream);
+      // Add tracks to all existing peer connections
+      peerConnectionsRef.current.forEach((pc) => {
+        stream.getTracks().forEach(track => {
+          pc.addTrack(track, stream);
+        });
+      });
       return stream;
     } catch (err) {
       console.error('Failed to get local stream:', err);
@@ -297,6 +304,8 @@ export function useWebRTC({
         switch (message.type) {
           case 'sync': {
             const { users, queue, speakers, timer, hostId, maxSpeakers, isAudioOnly } = message.payload;
+            // Track known speaker IDs including the current user
+            speakers.forEach((s: any) => knownSpeakerIdsRef.current.add(s.id));
             users.forEach((u: any) => {
               if (u.id !== user.id) {
                 onUserJoinedRef.current(u);
@@ -313,6 +322,7 @@ export function useWebRTC({
           case 'user-joined': {
             onUserJoinedRef.current(message.payload.user);
             if (message.payload.user.role === 'speaker' && isSpeaker) {
+              knownSpeakerIdsRef.current.add(message.payload.user.id);
               createOffer(message.payload.user.id);
             }
             break;
@@ -343,6 +353,20 @@ export function useWebRTC({
           }
           case 'speaker-update': {
             onSpeakerUpdateRef.current(message.payload.speakers);
+            const myId = user.id;
+            // Only create offers to NEW speakers if I'm already a speaker (prevents double-offer)
+            const newSpeakerIds = message.payload.speakers
+              .filter((s: any) => s.id !== myId)
+              .map((s: any) => s.id);
+            newSpeakerIds.forEach((id: string) => {
+              if (!knownSpeakerIdsRef.current.has(id)) {
+                knownSpeakerIdsRef.current.add(id);
+                // Only create offers if I'm already a speaker (known from sync or previous updates)
+                if (knownSpeakerIdsRef.current.has(myId)) {
+                  createOffer(id);
+                }
+              }
+            });
             break;
           }
           case 'queue-update': {
@@ -439,8 +463,8 @@ export function useWebRTC({
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'chat',
+        roomId: getRoomId(debateId),
         payload: {
-          roomId: getRoomId(debateId),
           userId: user.id,
           userName: user.name,
           userAvatar: user.avatar,
@@ -455,8 +479,8 @@ export function useWebRTC({
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'reaction',
+        roomId: getRoomId(debateId),
         payload: {
-          roomId: getRoomId(debateId),
           userId: user.id,
           userName: user.name,
           emoji,
