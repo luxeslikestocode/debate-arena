@@ -63,6 +63,18 @@ export function useWebRTC({
   const syncRemoteStreams = useCallback(() => {
     setRemoteStreams(Array.from(remoteStreamsRef.current.values()) as RemoteStream[]);
   }, []);
+
+  // Stable refs for callbacks to prevent connect() from changing on every render
+  const onUserJoinedRef = useRef(onUserJoined); onUserJoinedRef.current = onUserJoined;
+  const onUserLeftRef = useRef(onUserLeft); onUserLeftRef.current = onUserLeft;
+  const onUserUpdatedRef = useRef(onUserUpdated); onUserUpdatedRef.current = onUserUpdated;
+  const onSpeakerUpdateRef = useRef(onSpeakerUpdate); onSpeakerUpdateRef.current = onSpeakerUpdate;
+  const onQueueUpdateRef = useRef(onQueueUpdate); onQueueUpdateRef.current = onQueueUpdate;
+  const onTimerUpdateRef = useRef(onTimerUpdate); onTimerUpdateRef.current = onTimerUpdate;
+  const onChatMessageRef = useRef(onChatMessage); onChatMessageRef.current = onChatMessage;
+  const onReactionRef = useRef(onReaction); onReactionRef.current = onReaction;
+  const onHostActionRef = useRef(onHostAction); onHostActionRef.current = onHostAction;
+  const onErrorRef = useRef(onError); onErrorRef.current = onError;
   const [iceServers, setIceServers] = useState<RTCIceServer[]>([
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -287,26 +299,26 @@ export function useWebRTC({
             const { users, queue, speakers, timer, hostId, maxSpeakers, isAudioOnly } = message.payload;
             users.forEach((u: any) => {
               if (u.id !== user.id) {
-                onUserJoined(u);
+                onUserJoinedRef.current(u);
                 if (u.role === 'speaker') {
                   createOffer(u.id);
                 }
               }
             });
-            onQueueUpdate(queue);
-            onSpeakerUpdate(speakers);
-            onTimerUpdate(timer);
+            onQueueUpdateRef.current(queue);
+            onSpeakerUpdateRef.current(speakers);
+            onTimerUpdateRef.current(timer);
             break;
           }
           case 'user-joined': {
-            onUserJoined(message.payload.user);
+            onUserJoinedRef.current(message.payload.user);
             if (message.payload.user.role === 'speaker' && isSpeaker) {
               createOffer(message.payload.user.id);
             }
             break;
           }
           case 'user-left': {
-            onUserLeft(message.payload.userId);
+            onUserLeftRef.current(message.payload.userId);
             const pc = peerConnectionsRef.current.get(message.payload.userId);
             if (pc) {
               pc.close();
@@ -317,7 +329,7 @@ export function useWebRTC({
             break;
           }
           case 'user-updated': {
-            onUserUpdated(message.payload.userId, message.payload);
+            onUserUpdatedRef.current(message.payload.userId, message.payload);
             const stream = remoteStreamsRef.current.get(message.payload.userId);
             if (stream) {
               remoteStreamsRef.current.set(message.payload.userId, {
@@ -330,15 +342,15 @@ export function useWebRTC({
             break;
           }
           case 'speaker-update': {
-            onSpeakerUpdate(message.payload.speakers);
+            onSpeakerUpdateRef.current(message.payload.speakers);
             break;
           }
           case 'queue-update': {
-            onQueueUpdate(message.payload.queue);
+            onQueueUpdateRef.current(message.payload.queue);
             break;
           }
           case 'timer-update': {
-            onTimerUpdate(message.payload.timer);
+            onTimerUpdateRef.current(message.payload.timer);
             break;
           }
           case 'offer': {
@@ -354,19 +366,19 @@ export function useWebRTC({
             break;
           }
           case 'chat': {
-            onChatMessage(message.payload);
+            onChatMessageRef.current(message.payload);
             break;
           }
           case 'reaction': {
-            onReaction(message.payload);
+            onReactionRef.current(message.payload);
             break;
           }
           case 'host-action': {
-            onHostAction(message.payload);
+            onHostActionRef.current(message.payload);
             break;
           }
           case 'error': {
-            onError(message.payload.message);
+            onErrorRef.current(message.payload.message);
             break;
           }
         }
@@ -385,9 +397,9 @@ export function useWebRTC({
     ws.onerror = (err) => {
       console.error('WebSocket error:', err);
       setConnectionState('error');
-      onError('Connection error');
+      onErrorRef.current('Connection error');
     };
-  }, [debateId, user, isSpeaker, createOffer, handleOffer, handleAnswer, handleCandidate, onUserJoined, onUserLeft, onUserUpdated, onSpeakerUpdate, onQueueUpdate, onTimerUpdate, onChatMessage, onReaction, onHostAction, onError]);
+  }, [debateId, user, isSpeaker, createOffer, handleOffer, handleAnswer, handleCandidate, syncRemoteStreams]);
 
   // Disconnect
   const disconnect = useCallback(() => {
