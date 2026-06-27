@@ -56,7 +56,13 @@ export function useWebRTC({
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamsRef = useRef<Map<string, RemoteStream>>(new Map());
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
   const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+
+  const syncRemoteStreams = useCallback(() => {
+    setRemoteStreams(Array.from(remoteStreamsRef.current.values()) as RemoteStream[]);
+  }, []);
   const [iceServers, setIceServers] = useState<RTCIceServer[]>([
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -87,12 +93,14 @@ export function useWebRTC({
       });
 
       localStreamRef.current = stream;
+      setLocalStream(stream);
       return stream;
     } catch (err) {
       console.error('Failed to get local stream:', err);
       if (withVideo) {
         return startLocalStream(false);
       }
+      setLocalStream(null);
       onError('Could not access camera/microphone');
       return null;
     }
@@ -103,6 +111,7 @@ export function useWebRTC({
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
     }
+    setLocalStream(null);
   }, []);
 
   // Create peer connection
@@ -117,6 +126,7 @@ export function useWebRTC({
           ...stream,
           connectionState: pc.connectionState,
         });
+        syncRemoteStreams();
       }
     };
 
@@ -143,6 +153,7 @@ export function useWebRTC({
           isCameraOn: true,
           connectionState: pc.connectionState,
         });
+        syncRemoteStreams();
       }
     };
 
@@ -302,6 +313,7 @@ export function useWebRTC({
               peerConnectionsRef.current.delete(message.payload.userId);
             }
             remoteStreamsRef.current.delete(message.payload.userId);
+            syncRemoteStreams();
             break;
           }
           case 'user-updated': {
@@ -313,6 +325,7 @@ export function useWebRTC({
                 isMuted: message.payload.isMuted ?? stream.isMuted,
                 isCameraOn: message.payload.isCameraOn ?? stream.isCameraOn,
               });
+              syncRemoteStreams();
             }
             break;
           }
@@ -387,6 +400,7 @@ export function useWebRTC({
     peerConnectionsRef.current.forEach((pc) => pc.close());
     peerConnectionsRef.current.clear();
     remoteStreamsRef.current.clear();
+    syncRemoteStreams();
     
     stopLocalStream();
     setConnectionState('disconnected');
@@ -470,6 +484,7 @@ export function useWebRTC({
       const newMuted = !audioTracks[0]?.enabled;
       audioTracks.forEach(track => track.enabled = !newMuted);
       updateUserState({ isMuted: newMuted });
+      setLocalStream(localStreamRef.current);
       return newMuted;
     }
     return false;
@@ -484,6 +499,7 @@ export function useWebRTC({
       await startLocalStream(true);
     }
     updateUserState({ isCameraOn: newCameraOn });
+    if (localStreamRef.current) setLocalStream(localStreamRef.current);
     return newCameraOn;
   }, [startLocalStream, updateUserState]);
 
@@ -498,8 +514,8 @@ export function useWebRTC({
 
   return {
     connectionState,
-    localStream: localStreamRef.current,
-    remoteStreams: Array.from(remoteStreamsRef.current.values()) as RemoteStream[],
+    localStream,
+    remoteStreams,
     startLocalStream,
     stopLocalStream,
     toggleMute,
